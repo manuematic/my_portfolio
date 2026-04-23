@@ -383,7 +383,10 @@ class MyPortfolioOptionsFlow(config_entries.OptionsFlow):
     # ── Hilfsmethoden ─────────────────────────────────────────────────────
 
     def _get_coordinator(self):
-        return self.hass.data.get(DOMAIN, {}).get(self.config_entry.entry_id)
+        entry_data = self.hass.data.get(DOMAIN, {}).get(self.config_entry.entry_id)
+        if isinstance(entry_data, dict):
+            return entry_data.get("coordinator")
+        return entry_data
 
     @staticmethod
     def _build_stock_data(user_input: dict, kuerzel: str) -> dict:
