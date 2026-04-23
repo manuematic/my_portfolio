@@ -467,7 +467,9 @@ class MyPortfolioOptionsFlow(config_entries.OptionsFlow):
             else:
                 from .candidate_coordinator import CandidateCoordinator
                 _, coordinator = _get_coordinators(self.hass, self.config_entry.entry_id)
-                if coordinator:
+                if not coordinator:
+                    errors["base"] = "unknown"
+                else:
                     await coordinator.async_add_candidate({
                         ATTR_BEZEICHNUNG:    str(user_input.get(ATTR_BEZEICHNUNG, "")).strip(),
                         ATTR_KUERZEL:        kuerzel,
@@ -477,7 +479,7 @@ class MyPortfolioOptionsFlow(config_entries.OptionsFlow):
                         ATTR_ZIELKURS:       round(float(user_input.get(ATTR_ZIELKURS, 0)), 3),
                         ATTR_KANDIDAT_NOTIZ: str(user_input.get(ATTR_KANDIDAT_NOTIZ, "")).strip(),
                     })
-                return self.async_create_entry(title="", data=_current_options(self.config_entry))
+                    return self.async_create_entry(title="", data=_current_options(self.config_entry))
 
         return self.async_show_form(
             step_id="add_candidate",
@@ -536,7 +538,9 @@ class MyPortfolioOptionsFlow(config_entries.OptionsFlow):
             elif not kuerzel:
                 errors[ATTR_KUERZEL] = "invalid_kuerzel"
             else:
-                if coordinator:
+                if not coordinator:
+                    errors["base"] = "unknown"
+                else:
                     await coordinator.async_update_candidate(self._selected_candidate_id, {
                         ATTR_BEZEICHNUNG:    str(user_input.get(ATTR_BEZEICHNUNG, "")).strip(),
                         ATTR_KUERZEL:        kuerzel,
@@ -546,7 +550,7 @@ class MyPortfolioOptionsFlow(config_entries.OptionsFlow):
                         ATTR_ZIELKURS:       round(float(user_input.get(ATTR_ZIELKURS, 0)), 3),
                         ATTR_KANDIDAT_NOTIZ: str(user_input.get(ATTR_KANDIDAT_NOTIZ, "")).strip(),
                     })
-                return self.async_create_entry(title="", data=_current_options(self.config_entry))
+                    return self.async_create_entry(title="", data=_current_options(self.config_entry))
 
         return self.async_show_form(
             step_id="edit_candidate",

@@ -16,6 +16,7 @@ from .const import (
     DEFAULT_SOURCE,
 )
 from .coordinator import MyPortfolioCoordinator
+from .candidate_coordinator import CandidateCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -44,7 +45,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await coordinator.async_setup()
     await coordinator.async_config_entry_first_refresh()
 
-    hass.data[DOMAIN][entry.entry_id] = coordinator
+    # Kandidaten-Coordinator
+    candidate_coordinator = CandidateCoordinator(hass, entry, coordinator._session)
+    await candidate_coordinator.async_load()
+    await candidate_coordinator.async_config_entry_first_refresh()
+
+    hass.data[DOMAIN][entry.entry_id] = {
+        "coordinator":           coordinator,
+        "candidate_coordinator": candidate_coordinator,
+    }
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(entry.add_update_listener(_async_update_options))
@@ -55,7 +64,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unload_ok:
-        coordinator: MyPortfolioCoordinator = hass.data[DOMAIN].pop(entry.entry_id)
+        entry_data = hass.data[DOMAIN].pop(entry.entry_id)
+        coordinator: MyPortfolioCoordinator = entry_data["coordinator"] if isinstance(entry_data, dict) else entry_data
         await coordinator.async_shutdown()
     return unload_ok
 

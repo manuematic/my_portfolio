@@ -1,6 +1,7 @@
 """Koordinator für Kaufkandidaten."""
 from __future__ import annotations
 import logging
+import uuid
 from datetime import timedelta
 
 from homeassistant.core import HomeAssistant
@@ -32,30 +33,35 @@ class CandidateCoordinator(DataUpdateCoordinator):
             name=f"{DOMAIN}_candidates_{entry.entry_id}",
             update_interval=timedelta(minutes=15),
         )
-        self._entry   = entry
-        self._session = session
-        self._store   = Store(hass, STORAGE_VERSION_CAND,
-                              f"{STORAGE_KEY_CAND}.{entry.entry_id}")
+        self._entry      = entry
+        self._session    = session
+        self._store      = Store(hass, STORAGE_VERSION_CAND,
+                                 f"{STORAGE_KEY_CAND}.{entry.entry_id}")
         self._candidates: dict[str, dict] = {}
 
     async def async_load(self) -> None:
+        """Kandidaten aus Storage laden."""
         stored = await self._store.async_load()
         if stored and isinstance(stored.get("candidates"), dict):
             self._candidates = stored["candidates"]
         _LOGGER.debug("Kandidaten geladen: %d", len(self._candidates))
 
     async def _async_update_data(self) -> dict:
+        """Aktuelle Kurse für alle Kandidaten abrufen."""
         updated = {}
         for cid, cand in self._candidates.items():
-            isin   = (cand.get(ATTR_ISIN)    or "").strip()
+            isin    = (cand.get(ATTR_ISIN)    or "").strip()
             kuerzel = (cand.get(ATTR_KUERZEL) or "").strip()
             quelle  = cand.get("datenquelle", SOURCE_ING)
 
             price_data = None
-            if quelle == SOURCE_ING and isin:
-                price_data = await fetch_price_ing(self._session, isin)
-            elif kuerzel:
-                price_data = await fetch_price_yahoo(self._session, kuerzel)
+            try:
+                if quelle == SOURCE_ING and isin:
+                    price_data = await fetch_price_ing(self._session, isin)
+                elif kuerzel:
+                    price_data = await fetch_price_yahoo(self._session, kuerzel)
+            except Exception as exc:
+                _LOGGER.warning("Kandidat %s: Kursfehler: %s", kuerzel or isin, exc)
 
             kurs = price_data.get(ATTR_AKTUELLER_KURS) if price_data else None
             ziel = cand.get(ATTR_ZIELKURS)
@@ -79,23 +85,24 @@ class CandidateCoordinator(DataUpdateCoordinator):
     def get_candidates(self) -> dict:
         return self._candidates
 
-    async def async_add_candidate(self, data: dict) -> None:
-        import uuid
+    async def async_add_candidate(self, data: dict) -> str:
+        """Kandidat hinzufügen, speichern und ID zurückgeben."""
         cid = str(uuid.uuid4())
         self._candidates[cid] = data
-        await self._save()
-        await self.async_refresh()
+        await self._store.async_save({"candidates": self._candidates})
+        _LOGGER.debug("Kandidat hinzugefügt: %s (%s)", data.get(ATTR_BEZEICHNUNG), cid)
+        return cid
 
     async def async_update_candidate(self, cid: str, data: dict) -> None:
+        """Kandidat aktualisieren und speichern."""
         if cid in self._candidates:
             self._candidates[cid].update(data)
-            await self._save()
+            await self._store.async_save({"candidates": self._candidates})
             await self.async_refresh()
 
     async def async_remove_candidate(self, cid: str) -> None:
-        self._candidates.pop(cid, None)
-        await self._save()
-        await self.async_refresh()
-
-    async def _save(self) -> None:
-        await self._store.async_save({"candidates": self._candidates})
+        """Kandidat löschen und speichern."""
+        if cid in self._candidates:
+            self._candidates.pop(cid)
+            await self._store.async_save({"candidates": self._candidates})
+            await self.async_refresh()
